@@ -1,2 +1,6 @@
+*~
+*.elc
 *.pyc
+*#*#
+commit.txt
 playground.py
