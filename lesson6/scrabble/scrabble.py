@@ -18,6 +18,9 @@ FILENAME = "../4kwords.txt"
 WORDS, PREFIXES = readwordlist(FILENAME)
 
 
+BLANK = '_'
+
+
 def find_words(letters, pre="", results=None):
     if results is None:
         results = set()
@@ -59,11 +62,16 @@ def find_prefixes(hand, pre='', results=None):
         results = set()
     if pre == '':
         prev_hand, prev_results = hand, results
-    if pre in WORDS or pre in PREFIXES:
+    PRE = pre.upper()
+    if PRE in WORDS or PRE in PREFIXES:
         results.add(pre)
-    if pre in PREFIXES:
+    if PRE in PREFIXES:
         for letter in hand:
-            find_prefixes(hand.replace(letter, '', 1), pre+letter, results)
+            if is_blank(letter):
+                for C in LOWER_LETTERS:
+                    find_prefixes(hand.replace(BLANK, '', 1), pre+C, results)
+            else:
+                find_prefixes(hand.replace(letter, '', 1), pre+letter, results)
     return results
 
 
@@ -71,9 +79,10 @@ def add_suffixes(hand, pre, start, row, results, anchored=True):
     '''Add all possible suffixes, and accumulate (start, word) pairs in
     results'''
     i = start + len(pre)
-    if pre in WORDS and anchored and not is_letter(row[i]):
+    PRE = pre.upper()
+    if PRE in WORDS and anchored and not is_letter(row[i]):
         results.add((start, pre))
-    if pre in PREFIXES:
+    if PRE in PREFIXES:
         sq = row[i]
         if is_letter(sq):
             add_suffixes(hand, pre+sq, start, row, results)
@@ -83,6 +92,10 @@ def add_suffixes(hand, pre, start, row, results, anchored=True):
                 if L in possibilities:
                     add_suffixes(hand.replace(L, '', 1), pre+L, start,
                                  row, results)
+                elif is_blank(L):
+                    for C in possibilities:
+                        add_suffixes(hand.replace(BLANK, '', 1), pre+C.lower(),
+                                     start, row, results)
     return results
 
 
@@ -115,7 +128,11 @@ class anchor(set):
 
 
 LETTERS = list('ABCDEFGHIJKLMNOPQRSTUVWXYZ')
+LOWER_LETTERS = map(str.lower, LETTERS)  # representation of blank tiles
 ANY = anchor(LETTERS)
+
+for L in LOWER_LETTERS:
+    POINTS[L] = 0
 
 
 def row_plays(hand, row):
@@ -152,12 +169,17 @@ def legal_prefix(i, row):
     return ('', i-s)
 
 
-def is_letter(char):
-    return isinstance(char, str) and char in LETTERS
+def is_letter(sq):
+    return isinstance(sq, str) and (sq in LETTERS or sq in LOWER_LETTERS)
 
 
-def is_empty(char):
-    return char == '.' or char == '*' or isinstance(char, anchor)
+def is_empty(sq):
+    return sq == '.' or sq == '*' or isinstance(sq, anchor)
+
+
+def is_blank(tile):
+    "Return True the tile is blank"
+    return tile == BLANK
 
 
 def show(board):
