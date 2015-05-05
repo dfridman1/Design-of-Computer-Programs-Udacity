@@ -60,8 +60,16 @@ def poly(coefs):
     def polynomial(x):
         return sum(c*(x**p) for (p, c) in enumerate(coefs))
 
-    polynomial.coefs = coefs
+    polynomial.coefs = canonical(coefs)
 
+    polynomial.__name__ = get_poly_name(polynomial.coefs)
+
+    return polynomial
+
+
+def get_poly_name(coefs):
+    '''Given coefficients of the polynomial, return string representation of
+    it.'''
     name = []
     for term in enumerate(coefs):
         s = term_to_string(term)
@@ -70,10 +78,7 @@ def poly(coefs):
     name = ' + '.join(reversed(name))
     if not name:
         name = "0"
-
-    polynomial.__name__ = name
-
-    return polynomial
+    return name
 
 
 def term_to_string(term):
@@ -97,6 +102,16 @@ def term_to_string(term):
     else:
         power_str = power_to_string(power)
         return (str(coef) + " * " + power_str) if power_str else str(coef)
+
+
+def canonical(coefs):
+    "Remove trailing zeros and return as a tuple."
+    if isinstance(coefs, (int, float)):
+        coefs = [coefs]
+    elif len(coefs) == 0:
+        return (0,)
+    coefs = remove_trailing_zeros(coefs)
+    return tuple(coefs)
 
 
 def same_name(name1, name2):
@@ -147,22 +162,33 @@ def mul(p1, p2):
         for (j, d) in enumerate(p2.coefs):
             coefs[i+j] += c * d
 
-    remove_trailing_zeros(coefs)
-
-    return poly(tuple(coefs))
+    return poly(coefs)
 
 
 def remove_trailing_zeros(L):
+    t = type(L)
+    L = list(L)
     while L and L[-1] == 0:
-        L.pop()
+        del L[-1]
+    return t(L)
 
 
 def power(p, n):
     "Return a new polynomial which is p to the nth power (n - nonnegative)"
     if n == 0:
-        return poly((1,))
+        return poly(1)
+    elif even(n):
+        return square(power(p, n >> 1))
     else:
         return mul(p, power(p, n-1))
+
+
+def even(x):
+    return x % 2 == 0
+
+
+def square(x):
+    return mul(x, x)
 
 
 def deriv(p):
@@ -184,8 +210,70 @@ def integral(p, C=0):
     return poly(tuple(coefs))
 
 
+"""
+Now for an extra credit challenge: arrange to describe polynomials with an
+expression like '3 * x**2 + 5 * x + 9' rather than (9, 5, 3).  You can do this
+in one (or both) of two ways:
+
+(1) By defining poly as a class rather than a function, and overloading the
+__add__, __sub__, __mul__, and __pow__ operators, etc.  If you choose this,
+
+(2) Using the grammar parsing techniques we learned in Unit 5. For this
+approach, define a new function, Poly, which takes one argument, a string,
+as in Poly('30 * x**2 + 20 * x + 10').  Call test_poly2().
+"""
+
+
+class Poly(object):
+    def __init__(self, coefs):
+        self.coefs = canonical(coefs)
+        self.fn = poly(self.coefs)
+        self.__name__ = get_poly_name(self.coefs)
+
+    def __call__(self, x):
+        return self.fn(x)
+
+    def __eq__(self, other):
+        return isinstance(other, Poly) and self.coefs == other.coefs
+
+    def __add__(self, other):
+        coefs = add(self, Poly._coerce_poly(other)).coefs
+        return Poly(coefs)
+
+    def __sub__(self, other):
+        coefs = sub(self, Poly._coerce_poly(other)).coefs
+        return Poly(coefs)
+
+    def __pos__(self):
+        return self
+
+    def __neg__(self):
+        coefs = negate(self).coefs
+        return Poly(coefs)
+
+    def __mul__(self, other):
+        coefs = mul(self, Poly._coerce_poly(other)).coefs
+        return Poly(coefs)
+
+    def __pow__(self, n):
+        coefs = power(self, n).coefs
+        return Poly(coefs)
+
+    def __radd__(self, other):
+        coefs = add(self, Poly._coerce_poly(other)).coefs
+        return Poly(coefs)
+
+    def __rmul__(self, other):
+        coefs = mul(self, Poly._coerce_poly(other)).coefs
+        return Poly(coefs)
+
+    @staticmethod
+    def _coerce_poly(p):
+        return p if isinstance(p, Poly) else Poly(p)
+
+
 def test_poly():
-    global p1, p2, p3, p4, p5, p9  # global to ease debugging in an interactive session
+    global p1, p2, p3, p4, p5, p9
 
     p1 = poly((10, 20, 30))
     assert p1(0) == 10
@@ -224,7 +312,19 @@ def test_poly():
     assert deriv(p5)(1) == 55
     assert deriv(p5)(2) == 573
 
-    print "tests passed"
+    print "test_poly passed"
+
+
+def test_poly1():
+    # I define x as the polynomial 1*x + 0.
+    x = Poly((0, 1))
+    # From here on I can create polynomials by + and * operations on x.
+    newp1 = 30 * x**2 + 20 * x + 10  # This is a poly object, not a number!
+    assert p1(100) == newp1(100)  # The new poly objects are still callable.
+    assert same_name(p1.__name__,newp1.__name__)
+    assert (x + 1) * (x - 1) == x**2 - 1 == Poly((-1, 0, 1))
+    print "test_poly1 passed"
 
 
 test_poly()
+test_poly1()
