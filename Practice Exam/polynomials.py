@@ -111,14 +111,7 @@ def same_name(name1, name2):
 
 def is_poly(x):
     '''Return True if x is a poly (polynomial).'''
-    if callable(x):
-        try:
-            x.coefs
-            return True
-        except AttributeError:
-            return False
-    else:
-        return False
+    return callable(x) and hasattr(x, 'coefs')
 
 
 def add(p1, p2):
