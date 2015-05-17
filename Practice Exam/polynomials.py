@@ -51,6 +51,11 @@ They are described below; see the test_poly function for examples.
 """
 
 
+import re
+from utils import memo
+
+
+
 def poly(coefs):
     """Return a function that represents the polynomial with these coefficients.
     For example, if coefs=(10, 20, 30), return the function of x that computes
@@ -210,18 +215,14 @@ def integral(p, C=0):
     return poly(tuple(coefs))
 
 
-"""
+'''
 Now for an extra credit challenge: arrange to describe polynomials with an
 expression like '3 * x**2 + 5 * x + 9' rather than (9, 5, 3).  You can do this
 in one (or both) of two ways:
 
 (1) By defining poly as a class rather than a function, and overloading the
 __add__, __sub__, __mul__, and __pow__ operators, etc.  If you choose this,
-
-(2) Using the grammar parsing techniques we learned in Unit 5. For this
-approach, define a new function, Poly, which takes one argument, a string,
-as in Poly('30 * x**2 + 20 * x + 10').  Call test_poly2().
-"""
+'''
 
 
 class Poly(object):
@@ -256,6 +257,11 @@ class Poly(object):
         return Poly(coefs)
 
     def __pow__(self, n):
+        if isinstance(n, Poly):
+            if n.is_constant():
+                n = n.coefs[0]
+            else:
+                raise ValueError("Cannot raise to a non-constant power.")
         coefs = power(self, n).coefs
         return Poly(coefs)
 
@@ -267,9 +273,127 @@ class Poly(object):
         coefs = mul(self, Poly._coerce_poly(other)).coefs
         return Poly(coefs)
 
+    def is_constant(self):
+        return len(self.coefs) == 1
+
     @staticmethod
     def _coerce_poly(p):
         return p if isinstance(p, Poly) else Poly(p)
+
+
+
+'''(2) Using the grammar parsing techniques we learned in Unit 5. For this
+approach, define a new function, Poly, which takes one argument, a string,
+as in Poly('30 * x**2 + 20 * x + 10').  Call test_poly2().
+'''
+
+FAIL = (None, None)
+
+
+def grammar(description, whitespace=r'\s*'):
+    G = {' ': whitespace}
+    description = description.replace('\t', ' ')  # no tabs
+
+    for line in split(description, '\n'):
+        lhs, rhs = split(line, ' => ', 1)
+        alternatives = split(rhs, ' | ')
+        G[lhs] = tuple(map(split, alternatives))
+
+    return G
+
+
+def split(text, sep=None, maxsplit=-1):
+    return [t.strip() for t in text.strip().split(sep, maxsplit) if t]
+
+
+def parse(start_symbol, text, grammar):
+    tokenizer = grammar[' '] + '(%s)'
+
+    def parse_sequence(sequence, text):
+        result = []
+        for atom in sequence:
+            tree, text = parse_atom(atom, text)
+            if text is None: return FAIL
+            result.append(tree)
+        return result, text
+
+    @memo
+    def parse_atom(atom, text):
+        if atom in grammar:
+            for alternative in grammar[atom]:
+                tree, rem = parse_sequence(alternative, text)
+                if rem is not None: return [atom]+tree, rem
+            return FAIL
+        else:
+            m = re.match(tokenizer % atom, text)
+            return FAIL if (not m) else (m.group(1), text[m.end():])
+
+    return parse_atom(start_symbol, text)
+
+
+POLY_DESCRIPTION = '''EXP    => TERM [+-] EXP | TERM
+                      TERM   => INT [*] POWER | POWER [*] INT | INT [*] INT | POWER | INT
+                      POWER  => VAR [*][*] INT | VAR
+                      VAR    => [a-zA-Z]
+                      INT    => [0-9]+
+                   '''
+
+
+POLY_GRAMMAR = grammar(POLY_DESCRIPTION)
+
+
+def parse_poly(text):
+    return parse('EXP', text, POLY_GRAMMAR)
+
+
+def make_poly(text):
+    '''Parses text in order to build a Poly object.'''
+    tree = parse_poly(text)[0]
+    if tree is not None:
+        return compose_poly(tree)
+
+
+def compose_poly(tree):
+    '''Builds up a Poly object from the parsing tree.'''
+    atom, sequence = decompose(tree)
+    if atom in ['EXP', 'TERM', 'POWER']:
+        return evaluate(atom, sequence)
+    elif atom == 'VAR':
+        return Poly((0, 1))  # x
+    elif atom == 'INT':
+        return Poly((int(sequence[0]), 0))  # constant
+    else:
+        raise ValueError("unknown atom in the tree: %s" % atom)
+
+
+def decompose(tree):
+    x, y = tree[0], tree[1:]
+    return x, y
+
+
+def evaluate(atom, sequence):
+    L = len(sequence)
+    if L == 1:
+        return compose_poly(sequence[0])
+    elif L == 3:
+        first, operator, second = sequence
+        combine = find_combine_fn(operator)
+        return combine(compose_poly(first), compose_poly(second))
+
+
+def find_combine_fn(operator):
+    '''Return a binary function with the corresponding operator.'''
+    if operator == '+':
+        return lambda x, y: x + y
+    elif operator == '-':
+        return lambda x, y: x - y
+    elif operator == '*':
+        return lambda x, y: x * y
+    elif operator == '**':
+        return lambda x, y: x ** y
+    else:
+        raise ValueError("invalid operand: %s" % operator)
+
 
 
 def test_poly():
@@ -326,5 +450,13 @@ def test_poly1():
     print "test_poly1 passed"
 
 
+def test_poly2():
+    newp1 = make_poly('30 * x**2 + 20 * x + 10')
+    assert p1(100) == newp1(100)
+    assert same_name(p1.__name__,newp1.__name__)
+    print "test_poly2 passed"
+
+
 test_poly()
 test_poly1()
+test_poly2()
